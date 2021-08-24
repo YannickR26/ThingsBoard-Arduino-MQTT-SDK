@@ -387,24 +387,24 @@ public:
     do {
       delay(5);
       loop();
-    } while (m_fwVersion.isEmpty() && m_fwTitle.isEmpty() && (timeout >= millis()));
+    } while (m_fwVersion.empty() && m_fwTitle.empty() && (timeout >= millis()));
 
     // Check if firmware is available for our device
-    if (m_fwVersion.isEmpty() || m_fwTitle.isEmpty()) {
+    if (m_fwVersion.empty() || m_fwTitle.empty()) {
       Logger::log("No firmware found !");
       Firmware_Send_State("NO FIRMWARE FOUND");
       return false;
     }
 
     // If firmware is the same, we do not update it
-    if ((String(currFwTitle) == m_fwTitle) and (String(currFwVersion) == m_fwVersion)) {
+    if (!strcmp(currFwTitle, m_fwTitle.c_str()) && !strcmp(currFwVersion, m_fwVersion.c_str())) {
       Logger::log("Firmware is already up to date !");
       Firmware_Send_State("UP TO DATE");
       return false;
     }
 
     // If firmware title is not the same, we quit now
-    if (String(currFwTitle) != m_fwTitle) {
+    if (strcmp(currFwTitle, m_fwTitle.c_str())) {
       Logger::log("Firmware is not for us (title is different) !");
       Firmware_Send_State("NO FIRMWARE FOUND");
       return false;
@@ -418,11 +418,11 @@ public:
 
     Logger::log("=================================");
     Logger::log("A new Firmware is available :");
-    Logger::log(String(String(currFwVersion) + " => " + m_fwVersion).c_str());
+    Logger::log(std::string(std::string(currFwVersion) + " => " + m_fwVersion).c_str());
     Logger::log("Try to download it...");
 
-    int chunkSize = 4096;   // maybe less if we don't have enough RAM
-    int numberOfChunk = int(m_fwSize / chunkSize) + 1;
+    const int chunkSize = 4096;   // maybe less if we don't have enough RAM
+    const int numberOfChunk = int(m_fwSize / chunkSize) + 1;
     int currChunk = 0;
     int nbRetry = 3;
 
@@ -437,7 +437,11 @@ public:
 
     // Download the firmware
     do {
-      m_client.publish(String("v2/fw/request/0/chunk/" + String(currChunk)).c_str(), String(chunkSize).c_str());
+      char topic[30];
+      snprintf(topic, sizeof(topic), "v2/fw/request/0/chunk/%d", currChunk);
+      char payload[10];
+      snprintf(payload, sizeof(payload), "%d", chunkSize);
+      m_client.publish(topic, payload);
 
       timeout = millis() + 3000;
       do {
@@ -452,6 +456,7 @@ public:
           // Check if state is OK
           if ((m_fwState == "DOWNLOADING")) {
             currChunk++;
+            nbRetry = 3;
           }
           else {
             nbRetry--;
@@ -569,7 +574,10 @@ public:
 
     m_requestId++;
 
-    return m_client.publish(String("v1/devices/me/attributes/request/" + String(m_requestId)).c_str(), buffer);
+    char topic[40];
+    snprintf(topic, sizeof(topic), "v1/devices/me/attributes/request/%u", m_requestId);
+
+    return m_client.publish(topic, buffer);
   }
 
   // Subscribes multiple Shared attributes callbacks with given size
@@ -778,11 +786,11 @@ private:
     // Receive Full Firmware
     if (m_fwSize == sizeReceive) {
       md5.calculate();
-      String md5Str = md5.toString();
-      Logger::log(String("md5 compute:  " + md5Str).c_str());
-      Logger::log(String("md5 firmware: " + m_fwChecksum).c_str());
+      const char *md5Str = md5.toString().c_str();
+      Logger::log(std::string("md5 compute:  " + std::string(md5Str)).c_str());
+      Logger::log(std::string("md5 firmware: " + m_fwChecksum).c_str());
       // Check MD5
-      if (md5Str != m_fwChecksum) {
+      if (strcmp(md5Str, m_fwChecksum.c_str())) {
         Logger::log("Checksum verification failed !");
 #if defined(ESP32)
         Update.abort();
@@ -827,16 +835,16 @@ private:
 
       // Save data for firmware update
       if (data["fw_title"])
-        m_fwTitle = data["fw_title"].as<String>();
+        m_fwTitle = data["fw_title"].as<std::string>();
 
       if (data["fw_version"])
-        m_fwVersion = data["fw_version"].as<String>();
+        m_fwVersion = data["fw_version"].as<std::string>();
 
       if (data["fw_checksum"])
-        m_fwChecksum = data["fw_checksum"].as<String>();
+        m_fwChecksum = data["fw_checksum"].as<std::string>();
 
       if (data["fw_checksum_algorithm"])
-        m_fwChecksumAlgorithm = data["fw_checksum_algorithm"].as<String>();
+        m_fwChecksumAlgorithm = data["fw_checksum_algorithm"].as<std::string>();
 
       if (data["fw_size"])
         m_fwSize = data["fw_size"].as<int>();
@@ -913,7 +921,7 @@ private:
   unsigned int m_requestId;
 
   // For Firmware Update
-  String m_fwVersion, m_fwTitle, m_fwChecksum, m_fwChecksumAlgorithm, m_fwState;
+  std::string m_fwVersion, m_fwTitle, m_fwChecksum, m_fwChecksumAlgorithm, m_fwState;
   unsigned int m_fwSize;
   int m_fwChunkReceive;
 
@@ -924,7 +932,7 @@ private:
 
   // The callback for when a PUBLISH message is received from the server.
   static void on_message(char* topic, uint8_t* payload, unsigned int length) {
-    Logger::log(String("Callback on_message from topic: " + String(topic)).c_str());
+    Logger::log(std::string("Callback on_message from topic: " + std::string(topic)).c_str());
     if (!ThingsBoardSized::m_subscribedInstance) {
       return;
     }
@@ -1006,8 +1014,8 @@ public:
 
     bool rc = true;
 
-    String path = String("/api/v1/") + m_token + "/telemetry";
-    if (!m_client.post(path, "application/json", json) ||
+    std::string path = "/api/v1/" + std::string(m_token) + "/telemetry";
+    if (!m_client.post(path.c_str(), "application/json", json) ||
         (m_client.responseStatusCode() != HTTP_SUCCESS)) {
       rc = false;
     }
@@ -1059,8 +1067,8 @@ public:
 
     bool rc = true;
 
-    String path = String("/api/v1/") + m_token + "/attributes";
-    if (!m_client.post(path, "application/json", json)
+    std::string path = "/api/v1/" + std::string(m_token) + "/attributes";
+    if (!m_client.post(path.c_str(), "application/json", json)
           || (m_client.responseStatusCode() != HTTP_SUCCESS)) {
       rc = false;
     }
